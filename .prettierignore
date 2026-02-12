@@ -1,0 +1,8 @@
+node_modules
+dist
+out
+.vscode-test
+packages/extension/media
+package-lock.json
+*.plan.json
+CHANGELOG.md

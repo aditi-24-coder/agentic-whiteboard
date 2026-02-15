@@ -1,0 +1,40 @@
+{
+  "name": "agentic-whiteboard-monorepo",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/shared",
+    "packages/mcp-server",
+    "packages/webview",
+    "packages/extension"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w agentic-whiteboard-mcp && npm run build -w @agentic-whiteboard/webview && npm run build -w agentic-whiteboard",
+    "watch": "npm run watch -w agentic-whiteboard",
+    "playground": "node scripts/playground.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:extension": "npm run test:integration -w agentic-whiteboard",
+    "package": "npm run build && npm run package -w agentic-whiteboard",
+    "publish:vscode": "npm run build && npm run publish:vscode -w agentic-whiteboard",
+    "publish:openvsx": "npm run build && npm run publish:openvsx -w agentic-whiteboard",
+    "publish:mcp": "npm run build -w agentic-whiteboard-mcp && npm publish -w agentic-whiteboard-mcp --access public",
+    "publish:all": "npm run publish:mcp && npm run publish:vscode && npm run publish:openvsx"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}

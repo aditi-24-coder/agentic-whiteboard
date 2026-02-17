@@ -1,0 +1,7 @@
+{
+  "files": [],
+  "references": [],
+  "include": [],
+  "compilerOptions": { "noEmit": true },
+  "//": "Typecheck each package with its own tsconfig; see scripts/typecheck.mjs"
+}

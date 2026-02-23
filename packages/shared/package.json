@@ -1,0 +1,18 @@
+{
+  "name": "@agentic-whiteboard/shared",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "elkjs": "^0.12.1",
+    "zod": "^4.6.7"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./layout": "./src/layout.ts"
+  }
+}

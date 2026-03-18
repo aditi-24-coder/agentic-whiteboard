@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "revision": 1,
+  "id": "stripe-payments",
+  "title": "Add Stripe payments",
+  "prompt": "Let customers pay for orders with Stripe Checkout, and mark orders paid when Stripe confirms.",
+  "status": "awaiting_approval",
+  "nodes": [
+    {
+      "id": "web",
+      "kind": "component",
+      "label": "Checkout page",
+      "path": "web/src/pages/checkout.tsx",
+      "changeType": "modify"
+    },
+    {
+      "id": "api",
+      "kind": "component",
+      "label": "Orders API",
+      "changeType": "modify"
+    },
+    {
+      "id": "payments",
+      "kind": "component",
+      "label": "PaymentService",
+      "changeType": "new",
+      "risk": "medium"
+    },
+    {
+      "id": "payments-file",
+      "kind": "file",
+      "label": "payments.ts",
+      "path": "server/src/payments/payments.ts",
+      "changeType": "new",
+      "parentId": "payments"
+    },
+    {
+      "id": "webhook-file",
+      "kind": "file",
+      "label": "webhook.ts",
+      "path": "server/src/payments/webhook.ts",
+      "changeType": "new",
+      "risk": "high",
+      "parentId": "payments"
+    },
+    {
+      "id": "routes",
+      "kind": "file",
+      "label": "orders.routes.ts",
+      "path": "server/src/orders/orders.routes.ts",
+      "changeType": "modify"
+    },
+    {
+      "id": "db",
+      "kind": "component",
+      "label": "Orders table",
+      "path": "server/migrations",
+      "changeType": "modify",
+      "risk": "medium"
+    },
+    {
+      "id": "auth",
+      "kind": "component",
+      "label": "Auth middleware",
+      "path": "server/src/auth",
+      "changeType": "unchanged"
+    },
+    {
+      "id": "stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "changeType": "unchanged"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-web-api",
+      "from": "web",
+      "to": "api",
+      "label": "POST /checkout"
+    },
+    {
+      "id": "e-auth-api",
+      "from": "auth",
+      "to": "api"
+    },
+    {
+      "id": "e-api-payments",
+      "from": "api",
+      "to": "payments",
+      "label": "createSession"
+    },
+    {
+      "id": "e-payments-stripe",
+      "from": "payments",
+      "to": "stripe",
+      "label": "Checkout API"
+    },
+    {
+      "id": "e-stripe-webhook-file",
+      "from": "stripe",
+      "to": "webhook-file",
+      "label": "webhook"
+    },
+    {
+      "id": "e-payments-db",
+      "from": "payments",
+      "to": "db",
+      "label": "mark paid"
+    },
+    {
+      "id": "e-api-routes",
+      "from": "api",
+      "to": "routes"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "order": 1,
+      "title": "Add stripe SDK and STRIPE_SECRET_KEY config",
+      "nodeIds": [
+        "payments"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s2",
+      "order": 2,
+      "title": "Create PaymentService.createCheckoutSession",
+      "detail": "Idempotency key = order id.",
+      "nodeIds": [
+        "payments",
+        "payments-file"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s3",
+      "order": 3,
+      "title": "Add POST /orders/:id/checkout route",
+      "nodeIds": [
+        "api",
+        "routes"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s4",
+      "order": 4,
+      "title": "Add paid_at and stripe_session_id columns",
+      "nodeIds": [
+        "db"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s5",
+      "order": 5,
+      "title": "Handle checkout.session.completed webhook",
+      "detail": "Verify the signature before trusting the payload.",
+      "nodeIds": [
+        "webhook-file",
+        "db"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s6",
+      "order": 6,
+      "title": "Refactor auth middleware to allow webhook calls",
+      "nodeIds": [
+        "auth"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "s7",
+      "order": 7,
+      "title": "Redirect checkout page to Stripe",
+      "nodeIds": [
+        "web"
+      ],
+      "status": "pending"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "k-agent",
+      "text": "Never log card data or full Stripe payloads",
+      "author": "agent"
+    }
+  ],
+  "comments": [],
+  "layout": {
+    "web": {
+      "x": 12,
+      "y": 53,
+      "w": 200,
+      "h": 72
+    },
+    "api": {
+      "x": 294,
+      "y": 109,
+      "w": 200,
+      "h": 72
+    },
+    "payments": {
+      "x": 584,
+      "y": 108,
+      "w": 280,
+      "h": 200
+    },
+    "payments-file": {
+      "x": 604,
+      "y": 156,
+      "w": 240,
+      "h": 56
+    },
+    "webhook-file": {
+      "x": 604,
+      "y": 232,
+      "w": 240,
+      "h": 56
+    },
+    "routes": {
+      "x": 584,
+      "y": 12,
+      "w": 240,
+      "h": 56
+    },
+    "db": {
+      "x": 948,
+      "y": 214,
+      "w": 200,
+      "h": 72
+    },
+    "auth": {
+      "x": 12,
+      "y": 165,
+      "w": 200,
+      "h": 72
+    },
+    "stripe": {
+      "x": 314,
+      "y": 276,
+      "w": 180,
+      "h": 64
+    },
+    "s1": {
+      "x": 1288,
+      "y": 12,
+      "w": 300,
+      "h": 76
+    },
+    "s2": {
+      "x": 1288,
+      "y": 104,
+      "w": 300,
+      "h": 76
+    },
+    "s3": {
+      "x": 1288,
+      "y": 196,
+      "w": 300,
+      "h": 76
+    },
+    "s4": {
+      "x": 1288,
+      "y": 288,
+      "w": 300,
+      "h": 76
+    },
+    "s5": {
+      "x": 1288,
+      "y": 380,
+      "w": 300,
+      "h": 76
+    },
+    "s6": {
+      "x": 1288,
+      "y": 472,
+      "w": 300,
+      "h": 76
+    },
+    "s7": {
+      "x": 1288,
+      "y": 564,
+      "w": 300,
+      "h": 76
+    },
+    "k-agent": {
+      "x": 12,
+      "y": -158,
+      "w": 220,
+      "h": 110
+    }
+  },
+  "freeform": {
+    "shapes": []
+  },
+  "updatedAt": "2026-11-01T12:19:32.741Z"
+}

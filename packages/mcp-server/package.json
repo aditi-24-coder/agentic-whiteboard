@@ -1,0 +1,41 @@
+{
+  "name": "agentic-whiteboard-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that lets any AI draw diagrams, shapes and notes on Agentic Whiteboard whiteboards in VS Code.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agentic-whiteboard-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/index.js",
+    "README.md",
+    "ThirdPartyNotices.txt"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai agent",
+    "plan",
+    "claude code",
+    "copilot",
+    "cline",
+    "whiteboard"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USER/agentic-whiteboard.git",
+    "directory": "packages/mcp-server"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@agentic-whiteboard/shared": "*",
+    "zod": "^4.6.7"
+  }
+}

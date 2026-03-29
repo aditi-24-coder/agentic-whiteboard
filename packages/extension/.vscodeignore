@@ -1,0 +1,11 @@
+**
+!dist/extension.js
+!dist/mcp-server.js
+!media/webview.js
+!media/webview.css
+!media/icon.png
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+!ThirdPartyNotices.txt

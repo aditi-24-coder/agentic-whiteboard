@@ -1,0 +1,219 @@
+{
+  "name": "agentic-whiteboard",
+  "displayName": "Agentic Whiteboard",
+  "description": "A whiteboard in VS Code that your AI (Claude, Copilot, Codex, Cursor, Cline…) draws on over MCP. Create a .whiteboard file and just ask.",
+  "version": "0.1.0",
+  "publisher": "YOUR_PUBLISHER_ID",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USER/agentic-whiteboard.git"
+  },
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Visualization",
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "whiteboard",
+    "ai",
+    "mcp",
+    "diagram",
+    "claude code",
+    "copilot",
+    "codex",
+    "cursor",
+    "cline",
+    "sketch"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted folder, Agentic Whiteboard does not run git or test commands: code sync reads files directly, and verifying steps needs trust.",
+      "restrictedConfigurations": [
+        "agentic-whiteboard.verifyCommand"
+      ]
+    }
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "agentic-whiteboard.board",
+        "displayName": "Agentic Whiteboard Whiteboard",
+        "selector": [
+          {
+            "filenamePattern": "*.whiteboard"
+          },
+          {
+            "filenamePattern": "*.plan.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "agentic-whiteboard.newBoard",
+        "title": "New Whiteboard",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.openLatest",
+        "title": "Open Latest Whiteboard",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.setupAgent",
+        "title": "Set Up AI Integration (MCP)",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.openAsText",
+        "title": "Open Whiteboard as JSON",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.generateArchitecture",
+        "title": "Generate Architecture from Code",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.checkDrift",
+        "title": "Check Diagram Drift Against Code",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.verifyStep",
+        "title": "Verify Plan Step (Run Tests, Attach Diff)",
+        "category": "Agentic Whiteboard"
+      },
+      {
+        "command": "agentic-whiteboard.askAiSync",
+        "title": "Ask AI to Update the Diagram from Code",
+        "category": "Agentic Whiteboard"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "agentic-whiteboard.openAsText",
+          "when": "activeCustomEditorId == 'agentic-whiteboard.board'"
+        },
+        {
+          "command": "agentic-whiteboard.checkDrift",
+          "when": "activeCustomEditorId == 'agentic-whiteboard.board'"
+        },
+        {
+          "command": "agentic-whiteboard.verifyStep",
+          "when": "activeCustomEditorId == 'agentic-whiteboard.board'"
+        },
+        {
+          "command": "agentic-whiteboard.askAiSync",
+          "when": "activeCustomEditorId == 'agentic-whiteboard.board'"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "agentic-whiteboard.newBoard",
+          "group": "navigation@9"
+        },
+        {
+          "command": "agentic-whiteboard.generateArchitecture",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@9"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agentic Whiteboard",
+      "properties": {
+        "agentic-whiteboard.autoOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open a whiteboard beside the editor when an AI agent creates one."
+        },
+        "agentic-whiteboard.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "Board theme. `auto` follows the VS Code color theme."
+        },
+        "agentic-whiteboard.plansFolder": {
+          "type": "string",
+          "default": ".agentic-whiteboard",
+          "description": "Folder of older `.plan.json` boards. New boards are `*.whiteboard` files anywhere in the workspace."
+        },
+        "agentic-whiteboard.sketchStyle": {
+          "type": "boolean",
+          "default": true,
+          "description": "Draw shapes in a hand-drawn style."
+        },
+        "agentic-whiteboard.autoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save the whiteboard after each edit so AI agents see your changes immediately."
+        },
+        "agentic-whiteboard.registerMcpServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register the bundled Agentic Whiteboard MCP server with VS Code (Copilot agent mode) automatically."
+        },
+        "agentic-whiteboard.driftDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check whiteboards linked to code for drift (deleted or renamed files, changed dependencies, arrows with no import) as the code changes."
+        },
+        "agentic-whiteboard.verifyCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command that verifies a plan step, e.g. `npm test`. Empty: detected from package.json, pytest, go.mod or Cargo.toml."
+        },
+        "agentic-whiteboard.architectureMaxBoxes": {
+          "type": "number",
+          "default": 12,
+          "minimum": 3,
+          "maximum": 120,
+          "description": "Generate Architecture from Code shows at most this many boxes for your code (external systems come on top). Keep it small for a high-level overview."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "agentic-whiteboard.mcp",
+        "label": "Agentic Whiteboard"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test:integration": "node build.mjs --tests && node out/test/runTests.js",
+    "package": "node ../../scripts/vsce.mjs package",
+    "publish:vscode": "node ../../scripts/vsce.mjs publish:vscode",
+    "publish:openvsx": "node ../../scripts/vsce.mjs publish:openvsx"
+  },
+  "devDependencies": {
+    "@agentic-whiteboard/shared": "*",
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "~1.101.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.0",
+    "mocha": "^12.0.3",
+    "ovsx": "^1.3.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  }
+}

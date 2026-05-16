@@ -1,0 +1,60 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish the extension to the VS Code Marketplace and Open VSX,
+# and agentic-whiteboard-mcp to npm. Required secrets: VSCE_PAT, OVSX_PAT, NPM_TOKEN.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Check tag matches package versions
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          EXT=$(node -p "require('./packages/extension/package.json').version")
+          MCP=$(node -p "require('./packages/mcp-server/package.json').version")
+          if [ "$TAG" != "$EXT" ] || [ "$TAG" != "$MCP" ]; then
+            echo "Tag $TAG does not match extension $EXT / mcp $MCP"; exit 1
+          fi
+      - name: Check publisher is set
+        run: |
+          if grep -q YOUR_PUBLISHER_ID packages/extension/package.json; then
+            echo 'Set "publisher" in packages/extension/package.json before releasing.'; exit 1
+          fi
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: xvfb-run -a npm run test:extension
+      - run: npm run package -w agentic-whiteboard
+      # npm first: the extension's "npx agentic-whiteboard-mcp" setup needs this version on npm.
+      - name: Publish agentic-whiteboard-mcp to npm
+        run: npm publish -w agentic-whiteboard-mcp --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to VS Code Marketplace
+        working-directory: packages/extension
+        run: npx vsce publish --no-dependencies --packagePath agentic-whiteboard-*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX
+        working-directory: packages/extension
+        run: npx ovsx publish agentic-whiteboard-*.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packages/extension/*.vsix
+          generate_release_notes: true

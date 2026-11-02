@@ -12,11 +12,11 @@ import {
 import {
   FONT_SIZES,
   randomId,
+  type ArrowAnchor,
   type ArrowEnd,
   type ColorName,
   type DriftItem,
   type Edge,
-  type FontSizeName,
   type TextAlign,
   type FillStyle,
   type FreeformShape,
@@ -25,10 +25,11 @@ import {
 import { DEFAULT_SIZE } from './adapter';
 import { sceneBounds } from './export';
 import {
+  ANCHORS,
+  anchorPoint,
   arrowPoints,
   boxesIntersect,
   boxContains,
-  center,
   edgePoints,
   elementIndex,
   normalizeBox,
@@ -51,7 +52,8 @@ import {
   setText,
   setTextStyle,
 } from './ops';
-import { ArrowView, ElementView, Pill, color } from './shapes';
+import { routeConnectors } from './route';
+import { ArrowView, ElementView, Pill, color, labelPoint } from './shapes';
 import { TextStyleControls } from '../Toolbar';
 import { FONT_FAMILY, measureText, textBoxSize } from './text';
 import { textStyleOf } from './textStyle';
@@ -99,8 +101,8 @@ export interface ShapeStyleState {
   color: ColorName;
   fill: FillStyle;
   strokeWidth: number;
-  /** Text size for new text and shapes; unset uses each kind's default. */
-  fontSize?: FontSizeName;
+  /** Text size in px for new text and shapes; unset uses each kind's default. */
+  fontSize?: number;
 }
 
 export interface CanvasHandle {
@@ -163,12 +165,21 @@ type Gesture =
   | {
       type: 'arrow';
       start: Pt;
-      startBind?: string;
+      startBind?: Connection;
       id: string;
       base: Scene;
       head: 'arrow' | 'none';
     }
   | { type: 'arrowEnd'; id: string; which: 'start' | 'end'; base: Scene };
+
+/** What an arrow end attaches to: an element, at one of its connection points if `anchor`. */
+interface Connection {
+  id: string;
+  anchor?: ArrowAnchor;
+}
+
+/** How close (screen px) an arrow end must come to a connection point to snap to it. */
+const ANCHOR_SNAP = 14;
 
 /** Draw order: frames, nodes (parents under children), shapes, steps, stickies. Arrows go on top. */
 function renderOrder(scene: Scene): SceneElement[] {
@@ -225,6 +236,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
   const [cam, setCam] = useState<Camera>(props.initialCamera ?? { x: 0, y: 0, z: 1 });
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [hover, setHover] = useState<string | undefined>();
+  /** Element whose connection points are shown, while drawing or re-attaching an arrow. */
+  const [connect, setConnect] = useState<Connection | undefined>();
   const [marquee, setMarquee] = useState<Box | undefined>();
   const [editing, setEditing] = useState<{ id: string; isNew: boolean } | undefined>();
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -242,6 +255,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
       if (el.kind === 'node' && el.data.parentId) s.add(el.data.parentId);
     return s;
   }, [scene]);
+  const routes = useMemo(() => routeConnectors(scene, routeFor), [scene]);
 
   const onCameraChange = props.onCameraChange;
   useEffect(() => onCameraChange?.(cam), [cam, onCameraChange]);
@@ -375,6 +389,27 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
     [ordered],
   );
 
+  /** Where an arrow end at `p` attaches: a connection point within reach, else what is under it. */
+  const connectAt = (p: Pt, exclude?: ReadonlySet<string>): Connection | undefined => {
+    const reach = ANCHOR_SNAP / camRef.current.z;
+    let best: (Connection & { d: number }) | undefined;
+    for (const el of ordered) {
+      if (exclude?.has(el.id) || (el.kind === 'shape' && el.data.type === 'arrow')) continue;
+      for (const anchor of ANCHORS) {
+        const q = anchorPoint(el, anchor);
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d <= reach && (!best || d <= best.d)) best = { id: el.id, anchor, d };
+      }
+    }
+    if (best) return { id: best.id, anchor: best.anchor };
+    const el = elementAt(p, exclude);
+    return el && { id: el.id };
+  };
+  const endAt = (p: Pt, c: Connection | undefined): ArrowEnd =>
+    c
+      ? { x: p.x, y: p.y, bindTo: c.id, ...(c.anchor && { anchor: c.anchor }) }
+      : { x: p.x, y: p.y };
+
   const style = (): ShapeStyle => ({
     color: shapeStyle.color,
     fill: shapeStyle.fill,
@@ -382,7 +417,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
   });
 
   /** Text size for a new rectangle/ellipse/diamond, when the user picked one. */
-  const boxFont = () => (shapeStyle.fontSize ? { fontSize: FONT_SIZES[shapeStyle.fontSize] } : {});
+  const boxFont = () => (shapeStyle.fontSize ? { fontSize: shapeStyle.fontSize } : {});
 
   const createAt = (t: Tool, p: Pt): { scene: Scene; id: string; edit: boolean } | undefined => {
     const s = sceneRef.current;
@@ -432,7 +467,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
       }
       case 'text': {
         const id = randomId('f');
-        const fontSize = FONT_SIZES[shapeStyle.fontSize ?? 'M'];
+        const fontSize = shapeStyle.fontSize ?? FONT_SIZES.M;
         const box = { x: p.x, y: p.y - fontSize * 0.8, ...textBoxSize('', fontSize) };
         const data: FreeformShape = {
           ...style(),
@@ -539,7 +574,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
       return;
     }
     if (tool === 'arrow' || tool === 'line') {
-      const bind = tool === 'arrow' ? elementAt(p)?.id : undefined;
+      const bind = tool === 'arrow' ? connectAt(p) : undefined;
       gesture.current = {
         type: 'arrow',
         start: p,
@@ -570,8 +605,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
       return;
     }
 
-    // Select tool
-    const hitId = target.closest('[data-id]')?.getAttribute('data-id') ?? undefined;
+    // Select tool. Fall back to hit-testing the point so a click inside an outline selects it
+    // even where nothing is painted.
+    const hitId =
+      target.closest('[data-id]')?.getAttribute('data-id') ??
+      (target.closest('[data-handle]') ? undefined : elementAt(p)?.id);
     const action = target.closest('[data-action]')?.getAttribute('data-action') ?? undefined;
     if (!hitId) {
       gesture.current = {
@@ -611,6 +649,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
     if (!g) {
       const id = (e.target as Element).closest('[data-id]')?.getAttribute('data-id') ?? undefined;
       if (id !== hover) setHover(id);
+      const c = tool === 'arrow' && !readOnly ? connectAt(p) : undefined;
+      if (c?.id !== connect?.id || c?.anchor !== connect?.anchor) setConnect(c);
       return;
     }
     switch (g.type) {
@@ -711,10 +751,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
         if (Math.hypot(p.x - g.start.x, p.y - g.start.y) * camRef.current.z < 4) return;
         const endBind =
           g.head === 'arrow'
-            ? elementAt(p, g.startBind ? new Set([g.startBind]) : undefined)?.id
+            ? connectAt(p, g.startBind ? new Set([g.startBind.id]) : undefined)
             : undefined;
-        const start: ArrowEnd = g.startBind ? { ...g.start, bindTo: g.startBind } : g.start;
-        const end: ArrowEnd = endBind ? { ...p, bindTo: endBind } : p;
+        const start = endAt(g.start, g.startBind);
+        const end = endAt(p, endBind);
         const data: FreeformShape = {
           ...style(),
           fill: undefined,
@@ -732,13 +772,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
           addElement(g.base, { id: g.id, kind: 'shape', data, x: 0, y: 0, w: 0, h: 0 }),
           false,
         );
-        setHover(endBind);
+        setHover(endBind?.id);
+        setConnect(endBind);
         break;
       }
       case 'arrowEnd': {
-        const bind = elementAt(p, new Set([g.id]))?.id;
-        onChange(setArrowEnd(g.base, g.id, g.which, bind ? { ...p, bindTo: bind } : p), false);
-        setHover(bind);
+        const bind = connectAt(p, new Set([g.id]));
+        onChange(setArrowEnd(g.base, g.id, g.which, endAt(p, bind)), false);
+        setHover(bind?.id);
+        setConnect(bind);
         break;
       }
     }
@@ -748,6 +790,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
     const g = gesture.current;
     gesture.current = undefined;
     svgRef.current?.releasePointerCapture?.(e.pointerId);
+    setConnect(undefined);
     if (!g) return;
     const s = sceneRef.current;
     switch (g.type) {
@@ -942,6 +985,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
 
   const z = cam.z;
   const hoverEl = hover ? byId.get(hover) : undefined;
+  const connectEl = connect && !readOnly ? byId.get(connect.id) : undefined;
   const focusStep =
     (hoverEl?.kind === 'step' ? hoverEl : undefined) ??
     (selection.size === 1 ? byId.get([...selection][0]!) : undefined);
@@ -1006,7 +1050,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={() => !gesture.current && setHover(undefined)}
+        onPointerLeave={() => {
+          if (gesture.current) return;
+          setHover(undefined);
+          setConnect(undefined);
+        }}
         onDoubleClick={onDoubleClick}
       >
         <defs>
@@ -1039,17 +1087,16 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
             const from = byId.get(edge.from);
             const to = byId.get(edge.to);
             if (!from || !to) return null;
-            const route = routeFor(edge, from, to);
-            const [a, b] = route ? [route[0]!, route[route.length - 1]!] : edgePoints(from, to);
+            const route = routes.get(edge.id) ?? edgePoints(from, to);
             const sel = selection.has(edge.id);
             const drifted = props.drift?.get(edge.id)?.some((d) => d.severity !== 'info');
             return (
               <ArrowView
                 key={edge.id}
                 id={edge.id}
-                from={a}
-                to={b}
-                via={route?.slice(1, -1)}
+                from={route[0]!}
+                to={route[route.length - 1]!}
+                via={route.slice(1, -1)}
                 label={edge.label}
                 stroke={sel ? 'var(--pc-accent)' : drifted ? 'var(--pc-orange)' : 'var(--pc-edge)'}
                 strokeWidth={sel ? 2.5 : 1.8}
@@ -1060,13 +1107,14 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
           })}
           {ordered.map((el) => {
             if (el.kind !== 'shape' || el.data.type !== 'arrow') return null;
-            const [a, b] = arrowPoints(el.data, byId);
+            const route = routes.get(el.id) ?? arrowPoints(el.data, byId);
             return (
               <ArrowView
                 key={el.id}
                 id={el.id}
-                from={a}
-                to={b}
+                from={route[0]!}
+                to={route[route.length - 1]!}
+                via={route.slice(1, -1)}
                 label={el.data.label}
                 head={el.data.head}
                 stroke={color(el.data.color)}
@@ -1135,6 +1183,21 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
               rx={10}
             />
           )}
+          {connectEl &&
+            ANCHORS.map((a) => {
+              const q = anchorPoint(connectEl, a);
+              const on = connect?.anchor === a;
+              return (
+                <circle
+                  key={a}
+                  className={`pc-ui pc-anchor ${on ? 'pc-anchor-active' : ''}`}
+                  cx={q.x}
+                  cy={q.y}
+                  r={(on ? 6 : 4) / z}
+                  style={{ strokeWidth: 1.5 / z }}
+                />
+              );
+            })}
           <g className="pc-ui">
             {[...selection].map((id) => {
               const el = byId.get(id);
@@ -1179,14 +1242,13 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
             {singleArrow &&
               !readOnly &&
               (() => {
-                const [a, b] = arrowPoints(singleArrow, byId);
+                const route = routes.get(single!.id) ?? arrowPoints(singleArrow, byId);
+                const a = route[0]!;
+                const b = route[route.length - 1]!;
                 return (
                   <>
-                    <line
-                      x1={a.x}
-                      y1={a.y}
-                      x2={b.x}
-                      y2={b.y}
+                    <polyline
+                      points={route.map((p) => `${p.x},${p.y}`).join(' ')}
                       className="pc-selection"
                       style={{ strokeWidth: 1 / z }}
                     />
@@ -1237,7 +1299,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
               : (() => {
                   const from = byId.get(editingEdge!.from)!;
                   const to = byId.get(editingEdge!.to)!;
-                  const c = center({ ...normalizeBox(...edgePoints(from, to)) });
+                  const c = labelPoint(routes.get(editingEdge!.id) ?? edgePoints(from, to));
                   return { x: c.x * z + cam.x - 80, y: c.y * z + cam.y - 16, w: 160, h: 32 };
                 })()
           }
@@ -1278,7 +1340,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(prop
   );
 });
 
-/** The auto-layout route of an edge, if both nodes are still where the layout put them. */
 const DRIFT_LABEL: Record<DriftItem['kind'], string> = {
   missing: 'missing',
   renamed: 'moved?',
@@ -1298,6 +1359,7 @@ export function driftLabel(items: readonly DriftItem[]): string {
   return DRIFT_LABEL[first.kind] + (items.length > 1 ? ` +${items.length - 1}` : '');
 }
 
+/** The auto-layout route of an edge, if both nodes are still where the layout put them. */
 function routeFor(edge: Edge, from: Box, to: Box): readonly Pt[] | undefined {
   const r = edge.route;
   if (!r) return undefined;

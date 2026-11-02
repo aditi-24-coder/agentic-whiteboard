@@ -344,7 +344,7 @@ export function ToolPalette({
         <div className="pc-tool-group pc-popover-anchor">
           <button
             className={`pc-tool pc-style-btn ${styleOpen ? 'pc-tool-active' : ''}`}
-            title="Color, fill and stroke for new shapes"
+            title="Color, fill, text size and stroke (applies to the selection and new shapes)"
             aria-label="Style"
             aria-expanded={styleOpen}
             onClick={() => setStyleOpen((o) => !o)}
@@ -383,6 +383,7 @@ export function StylePicker({
     { value: 2, label: 'Medium' },
     { value: 4, label: 'Bold' },
   ];
+  const fontPx = style.fontSize ?? FONT_SIZES.M;
   return (
     <div className="pc-style-picker">
       <div className="pc-field-label">Color</div>
@@ -415,18 +416,21 @@ export function StylePicker({
       {forNewShapes && (
         <>
           <div className="pc-field-label">Text size</div>
-          <div className="pc-segmented" role="group" aria-label="Text size for new text">
-            {(Object.keys(FONT_SIZES) as FontSizeName[]).map((n) => (
-              <button
-                key={n}
-                className={(style.fontSize ?? 'M') === n ? 'pc-seg-active' : ''}
-                aria-pressed={(style.fontSize ?? 'M') === n}
-                title={`${FONT_SIZES[n]}px`}
-                onClick={() => onStyle({ ...style, fontSize: n })}
-              >
-                {n}
-              </button>
-            ))}
+          <div className="pc-text-controls">
+            <div className="pc-segmented" role="group" aria-label="Text size for new text">
+              {(Object.entries(FONT_SIZES) as [FontSizeName, number][]).map(([n, px]) => (
+                <button
+                  key={n}
+                  className={fontPx === px ? 'pc-seg-active' : ''}
+                  aria-pressed={fontPx === px}
+                  title={`${px}px`}
+                  onClick={() => onStyle({ ...style, fontSize: px })}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <FontSizeInput value={fontPx} onChange={(px) => onStyle({ ...style, fontSize: px })} />
           </div>
         </>
       )}
@@ -505,48 +509,62 @@ const ALIGNS: { value: TextAlign; icon: IconName; label: string }[] = [
  * Text size, bold and alignment for the selected text. `value` is the effective style of the
  * first selected shape (defaults filled in), so the active buttons always reflect what is drawn.
  */
+/** A px text size field; commits on Enter or blur. */
+function FontSizeInput({ value, onChange }: { value: number; onChange(px: number): void }) {
+  return (
+    <label className="pc-font-size" title="Text size in px">
+      <input
+        key={value}
+        type="number"
+        min={8}
+        max={200}
+        defaultValue={value}
+        aria-label="Text size in px"
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const n = Math.round(Number(e.currentTarget.value));
+          if (n >= 8 && n <= 200 && n !== value) onChange(n);
+        }}
+      />
+      px
+    </label>
+  );
+}
+
 export function TextStyleControls({
   value,
   onChange,
+  showSize = true,
 }: {
   value: Required<TextStyle>;
   onChange(patch: TextStyle): void;
+  /** Off where the style picker already offers the size. */
+  showSize?: boolean;
 }) {
   const sizes = Object.entries(FONT_SIZES) as [FontSizeName, number][];
   return (
     <div className="pc-text-controls">
-      <div className="pc-segmented" role="group" aria-label="Text size">
-        {sizes.map(([n, px]) => (
-          <button
-            key={n}
-            className={value.fontSize === px ? 'pc-seg-active' : ''}
-            aria-pressed={value.fontSize === px}
-            title={`${px}px`}
-            onClick={() => onChange({ fontSize: px })}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-      <label className="pc-font-size" title="Text size in px">
-        <input
-          key={value.fontSize}
-          type="number"
-          min={8}
-          max={200}
-          defaultValue={value.fontSize}
-          aria-label="Text size in px"
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
-          onBlur={(e) => {
-            const n = Math.round(Number(e.currentTarget.value));
-            if (n >= 8 && n <= 200 && n !== value.fontSize) onChange({ fontSize: n });
-          }}
-        />
-        px
-      </label>
+      {showSize && (
+        <>
+          <div className="pc-segmented" role="group" aria-label="Text size">
+            {sizes.map(([n, px]) => (
+              <button
+                key={n}
+                className={value.fontSize === px ? 'pc-seg-active' : ''}
+                aria-pressed={value.fontSize === px}
+                title={`${px}px`}
+                onClick={() => onChange({ fontSize: px })}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <FontSizeInput value={value.fontSize} onChange={(px) => onChange({ fontSize: px })} />
+        </>
+      )}
       <button
         className={`pc-tool ${value.bold ? 'pc-tool-active' : ''}`}
         aria-pressed={value.bold}

@@ -3,17 +3,13 @@ import {
   StepStatusSchema,
   type AskAiRequest,
   type CodeInfo,
-  type ColorName,
   type DriftItem,
-  type FillStyle,
-  type FreeformShape,
 } from '@agentic-whiteboard/shared';
-import type { ShapeStyleState } from './canvas/Canvas';
 import { DriftList, NodeCodeSection, VerificationSection } from './CodePanel';
 import { isBlocked, isStylableText, mapElements, setBlocked, setTextStyle } from './canvas/ops';
 import { textStyleOf } from './canvas/textStyle';
 import type { Scene, SceneElement } from './canvas/types';
-import { StylePicker, TextStyleControls } from './Toolbar';
+import { TextStyleControls } from './Toolbar';
 
 interface InspectorProps {
   scene: Scene;
@@ -229,7 +225,12 @@ export function Inspector({
       <Section title={shapes.length ? `${shapes.length} shapes` : `${flow.length} selected`}>
         <BlockActions scene={scene} ids={ids} onChange={onChange} />
         {shapes.length > 0 && (
-          <ShapeStyle shapes={shapes} first={shapes[0]!.data} scene={scene} onChange={onChange} />
+          <TextControls
+            scene={scene}
+            ids={shapes.map((x) => x.id)}
+            onChange={onChange}
+            showSize={false}
+          />
         )}
         {flow.length > 0 && (
           <>
@@ -527,7 +528,7 @@ export function Inspector({
       return (
         <Section title="Shape">
           <BlockActions scene={scene} ids={[el.id]} onChange={onChange} />
-          <ShapeStyle shapes={[el]} first={el.data} scene={scene} onChange={onChange} />
+          <TextControls scene={scene} ids={[el.id]} onChange={onChange} showSize={false} />
         </Section>
       );
   }
@@ -538,55 +539,18 @@ function labelOf(scene: Scene, id: string): string {
   return el?.kind === 'node' ? el.data.label.split('\n')[0]! : id;
 }
 
-function ShapeStyle({
-  shapes,
-  first,
-  scene,
-  onChange,
-}: {
-  shapes: Extract<SceneElement, { kind: 'shape' }>[];
-  first: FreeformShape;
-  scene: Scene;
-  onChange(s: Scene): void;
-}) {
-  const current: ShapeStyleState = {
-    color: first.color ?? 'default',
-    fill: first.fill ?? 'none',
-    strokeWidth: first.strokeWidth ?? 2,
-  };
-  const apply = (s: ShapeStyleState) =>
-    onChange(
-      mapElements(scene, new Set(shapes.map((x) => x.id)), (e) =>
-        e.kind === 'shape'
-          ? {
-              ...e,
-              data: {
-                ...e.data,
-                color: s.color as ColorName,
-                fill: s.fill as FillStyle,
-                strokeWidth: s.strokeWidth,
-              },
-            }
-          : e,
-      ),
-    );
-  return (
-    <>
-      <StylePicker style={current} onStyle={apply} />
-      <TextControls scene={scene} ids={shapes.map((x) => x.id)} onChange={onChange} />
-    </>
-  );
-}
-
 /** Text size, bold and alignment for the given elements, when all of them hold styleable text. */
 function TextControls({
   scene,
   ids,
   onChange,
+  showSize,
 }: {
   scene: Scene;
   ids: readonly string[];
   onChange(s: Scene): void;
+  /** Off for free-form shapes: the toolbar's style picker sets their size. */
+  showSize?: boolean;
 }) {
   const els = scene.elements.filter((e) => ids.includes(e.id));
   const value = els[0] && textStyleOf(els[0]);
@@ -597,6 +561,7 @@ function TextControls({
       <TextStyleControls
         value={value}
         onChange={(patch) => onChange(setTextStyle(scene, new Set(ids), patch))}
+        showSize={showSize}
       />
     </>
   );

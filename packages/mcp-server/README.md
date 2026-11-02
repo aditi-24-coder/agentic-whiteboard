@@ -1,6 +1,6 @@
 # Agentic Whiteboard MCP Server
 
-This package provides the MCP server for [Agentic Whiteboard](https://github.com/YOUR_GITHUB_USER/agentic-whiteboard).
+This package provides the MCP server for [Agentic Whiteboard](https://github.com/aditi-24-coder/agentic-whiteboard).
 It allows MCP-compatible AI clients to create and edit diagrams, shapes, arrows, and notes in a
 whiteboard displayed in VS Code.
 

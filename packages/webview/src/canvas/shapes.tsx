@@ -653,6 +653,30 @@ function Freeform({
     case 'diamond':
       return (
         <>
+          {/* Unfilled outlines only catch clicks on the stroke; this makes the inside grabbable. */}
+          {s.type === 'ellipse' ? (
+            <ellipse
+              className="pc-hit"
+              cx={w / 2}
+              cy={h / 2}
+              rx={w / 2}
+              ry={h / 2}
+              style={{ fill: 'transparent', stroke: 'none' }}
+            />
+          ) : s.type === 'diamond' ? (
+            <polygon
+              className="pc-hit"
+              points={`${w / 2},0 ${w},${h / 2} ${w / 2},${h} 0,${h / 2}`}
+              style={{ fill: 'transparent', stroke: 'none' }}
+            />
+          ) : (
+            <rect
+              className="pc-hit"
+              width={w}
+              height={h}
+              style={{ fill: 'transparent', stroke: 'none' }}
+            />
+          )}
           <Outline
             kind={s.type === 'rect' ? 'rrect' : s.type}
             r={6}
@@ -775,7 +799,7 @@ export const ElementView = memo(function ElementView({ el, sketch, isParent }: E
 });
 
 /** Middle of the longest segment: where a label is least likely to sit on a bend. */
-function labelPoint(pts: readonly Pt[]): Pt {
+export function labelPoint(pts: readonly Pt[]): Pt {
   let best = 0;
   let bestLen = -1;
   for (let i = 0; i < pts.length - 1; i++) {

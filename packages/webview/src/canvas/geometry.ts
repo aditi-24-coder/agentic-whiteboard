@@ -1,4 +1,4 @@
-import type { ArrowShape } from '@agentic-whiteboard/shared';
+import type { ArrowAnchor, ArrowShape } from '@agentic-whiteboard/shared';
 import type { Box, Pt, Scene, SceneElement } from './types';
 
 export function normalizeBox(a: Pt, b: Pt): Box {
@@ -107,11 +107,31 @@ export function elementIndex(scene: Scene): Map<string, SceneElement> {
 export function arrowPoints(a: ArrowShape, byId: Map<string, SceneElement>): [Pt, Pt] {
   const sEl = a.start.bindTo ? byId.get(a.start.bindTo) : undefined;
   const eEl = a.end.bindTo ? byId.get(a.end.bindTo) : undefined;
-  const sRef: Pt = sEl ? center(sEl) : a.start;
-  const eRef: Pt = eEl ? center(eEl) : a.end;
-  const start = sEl ? outlinePoint(sEl, eRef, outlineOf(sEl)) : { x: a.start.x, y: a.start.y };
-  const end = eEl ? outlinePoint(eEl, sRef, outlineOf(eEl)) : { x: a.end.x, y: a.end.y };
+  const sRef: Pt = sEl
+    ? a.start.anchor
+      ? anchorPoint(sEl, a.start.anchor)
+      : center(sEl)
+    : a.start;
+  const eRef: Pt = eEl ? (a.end.anchor ? anchorPoint(eEl, a.end.anchor) : center(eEl)) : a.end;
+  const tip = (el: SceneElement, anchor: ArrowAnchor | undefined, toward: Pt) =>
+    anchor ? anchorPoint(el, anchor, 6) : outlinePoint(el, toward, outlineOf(el));
+  const start = sEl ? tip(sEl, a.start.anchor, eRef) : { x: a.start.x, y: a.start.y };
+  const end = eEl ? tip(eEl, a.end.anchor, sRef) : { x: a.end.x, y: a.end.y };
   return [start, end];
+}
+
+export const ANCHORS: readonly ArrowAnchor[] = ['n', 'e', 's', 'w'];
+
+/**
+ * The connection point on a side of `b`: the middle of that side, which lies on the outline of
+ * rectangles, ellipses and diamonds alike, pushed out by `gap`.
+ */
+export function anchorPoint(b: Box, side: ArrowAnchor, gap = 0): Pt {
+  const c = center(b);
+  if (side === 'n') return { x: c.x, y: b.y - gap };
+  if (side === 's') return { x: c.x, y: b.y + b.h + gap };
+  if (side === 'w') return { x: b.x - gap, y: c.y };
+  return { x: b.x + b.w + gap, y: c.y };
 }
 
 /** Endpoints of a plan edge between two node elements. */

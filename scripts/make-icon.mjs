@@ -1,12 +1,15 @@
-// Draws the 128×128 extension icon (an original design: three plan boxes, a data-flow arrow
-// and a check mark) and writes packages/extension/media/icon.png. No dependencies: it
-// rasterises at 4× and box-filters down for antialiasing, then encodes the PNG with zlib.
+// Draws the extension icon (an original design: a whiteboard card with two nodes joined by a
+// curved arrow, plus an AI sparkle, on a violet-to-blue tile) and writes
+// packages/extension/media/icon.png at 256×256. No dependencies: shapes are defined in a
+// 128-unit space, rasterised at 4× and box-filtered down for antialiasing, then the PNG is
+// encoded with zlib.
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
-const SIZE = 128;
+const SIZE = 256;
 const SS = 4;
 const N = SIZE * SS;
+const UNIT = SIZE / 128; // design coordinates are 0..128
 const px = new Float32Array(N * N * 4); // premultiplied RGBA, 0..1
 
 const hex = (h, a = 1) => [
@@ -15,6 +18,7 @@ const hex = (h, a = 1) => [
   parseInt(h.slice(5, 7), 16) / 255,
   a,
 ];
+const mix = (c1, c2, t) => c1.map((c, i) => c + (c2[i] - c) * t);
 
 function blend(i, [r, g, b, a]) {
   const k = 1 - a;
@@ -24,13 +28,17 @@ function blend(i, [r, g, b, a]) {
   px[i + 3] = a + px[i + 3] * k;
 }
 
-/** Fills every supersampled pixel whose centre satisfies `inside(x, y)` (coords in 0..128). */
+/**
+ * Fills every supersampled pixel whose centre satisfies `inside(u, v)` (coords in 0..128).
+ * `color` is an RGBA array or a function of (u, v) returning one, for gradients.
+ */
 function fill(inside, color) {
+  const at = typeof color === 'function' ? color : () => color;
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
-      const u = (x + 0.5) / SS;
-      const v = (y + 0.5) / SS;
-      if (inside(u, v)) blend((y * N + x) * 4, color);
+      const u = (x + 0.5) / SS / UNIT;
+      const v = (y + 0.5) / SS / UNIT;
+      if (inside(u, v)) blend((y * N + x) * 4, at(u, v));
     }
 }
 
@@ -40,7 +48,6 @@ const roundRect = (x0, y0, w, h, r) => (u, v) => {
   const cy = Math.min(Math.max(v, y0 + r), y0 + h - r);
   return (u - cx) ** 2 + (v - cy) ** 2 <= r * r;
 };
-const ring = (fn, inner) => (u, v) => fn(u, v) && !inner(u, v);
 const segment = (x1, y1, x2, y2, width) => (u, v) => {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -55,32 +62,49 @@ const triangle = (a, b, c) => (u, v) => {
   const d3 = s(c, a);
   return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
 };
-
-// Background: deep blue tile.
-fill(roundRect(4, 4, 120, 120, 26), hex('#1f3f8f'));
-// Faint dot grid, like the canvas.
-for (let gx = 20; gx < 112; gx += 14)
-  for (let gy = 20; gy < 112; gy += 14) fill(circle(gx, gy, 1.1), hex('#ffffff', 0.18));
-
-const box = (x, y, w, h, stroke) => {
-  fill(roundRect(x, y, w, h, 7), hex('#ffffff'));
-  fill(ring(roundRect(x, y, w, h, 7), roundRect(x + 3, y + 3, w - 6, h - 6, 5)), hex(stroke));
+/** Four-pointed sparkle: a concave astroid-like star of radius r. */
+const sparkle = (cx, cy, r) => (u, v) =>
+  Math.sqrt(Math.abs(u - cx) / r) + Math.sqrt(Math.abs(v - cy) / r) <= 1;
+/** Cubic Bézier stroke, as the union of short round-capped segments. */
+const curve = (p0, p1, p2, p3, width, steps = 32) => {
+  const pt = (t) =>
+    [0, 1].map(
+      (k) =>
+        (1 - t) ** 3 * p0[k] +
+        3 * (1 - t) ** 2 * t * p1[k] +
+        3 * (1 - t) * t ** 2 * p2[k] +
+        t ** 3 * p3[k],
+    );
+  const parts = [];
+  for (let i = 0; i < steps; i++) {
+    const [x1, y1] = pt(i / steps);
+    const [x2, y2] = pt((i + 1) / steps);
+    parts.push(segment(x1, y1, x2, y2, width));
+  }
+  return (u, v) => parts.some((f) => f(u, v));
 };
-// Connectors first so boxes sit on top.
-fill(segment(40, 44, 60, 64, 4), hex('#dfe8ff'));
-fill(segment(40, 86, 60, 72, 4), hex('#dfe8ff'));
-fill(segment(84, 68, 96, 68, 4), hex('#dfe8ff'));
-fill(triangle([102, 68], [93, 62], [93, 74]), hex('#dfe8ff'));
 
-box(16, 28, 34, 24, '#4f86f7'); // modify (blue)
-box(16, 76, 34, 24, '#4f86f7');
-box(56, 54, 34, 28, '#34b35a'); // new (green)
+// Background: rounded tile with a diagonal violet-to-blue gradient.
+const tileTop = hex('#8b5cf6');
+const tileBottom = hex('#2563eb');
+fill(roundRect(4, 4, 120, 120, 28), (u, v) => mix(tileTop, tileBottom, (u + v - 8) / 240));
 
-// Check badge.
-fill(circle(98, 98, 17), hex('#34b35a'));
-fill(ring(circle(98, 98, 17), circle(98, 98, 14.5)), hex('#ffffff'));
-fill(segment(90, 98, 96, 104, 4.5), hex('#ffffff'));
-fill(segment(96, 104, 107, 91, 4.5), hex('#ffffff'));
+// Whiteboard card with a soft drop shadow.
+for (let i = 4; i >= 1; i--) fill(roundRect(18, 30 + i, 92, 74, 12), hex('#1e1b4b', 0.07));
+fill(roundRect(18, 30, 92, 74, 12), hex('#ffffff'));
+
+// Curved connector with arrowhead, drawn before the nodes so they sit on top.
+const ink = hex('#1e293b');
+fill(curve([42, 80], [50, 56], [61, 76], [71, 67], 4.5), ink);
+fill(triangle([78.5, 60.5], [75, 71.5], [67.5, 63]), ink);
+
+// Nodes: a violet circle and a green rounded square.
+fill(circle(38, 82, 9), hex('#8b5cf6'));
+fill(roundRect(80, 42, 18, 18, 5), hex('#10b981'));
+
+// AI sparkles, overlapping the card's top-right corner.
+fill(sparkle(105, 25, 18), hex('#fde047'));
+fill(sparkle(84, 14, 7), hex('#ffffff'));
 
 // Downsample and encode.
 const raw = Buffer.alloc(SIZE * (SIZE * 4 + 1));

@@ -19,6 +19,47 @@ export function sceneBounds(scene: Scene): Box {
 }
 
 /**
+ * Bounds of what the live canvas actually drew for `scene`, in world coordinates. Unlike
+ * `sceneBounds` this covers routed edges that detour around boxes and their labels.
+ */
+function renderedBounds(svg: SVGSVGElement, scene: Scene): Box | undefined {
+  const world = svg.querySelector<SVGGraphicsElement>('.pc-world');
+  const toWorld = world?.getCTM?.()?.inverse();
+  if (!world || !toWorld) return undefined;
+  const kept = new Set([...scene.elements.map((e) => e.id), ...scene.edges.map((e) => e.id)]);
+  const boxes: Box[] = [];
+  world.querySelectorAll<SVGGraphicsElement>('[data-id]').forEach((n) => {
+    if (!kept.has(n.getAttribute('data-id') ?? '')) return;
+    try {
+      const bb = n.getBBox();
+      const m = toWorld.multiply(n.getCTM()!);
+      const corners = [
+        [bb.x, bb.y],
+        [bb.x + bb.width, bb.y],
+        [bb.x, bb.y + bb.height],
+        [bb.x + bb.width, bb.y + bb.height],
+      ].map(([px, py]) => new DOMPoint(px, py).matrixTransform(m));
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => p.y);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      boxes.push({ x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y });
+    } catch {
+      // Not rendered (e.g. hidden): sceneBounds still covers it.
+    }
+  });
+  return unionBoxes(boxes);
+}
+
+/** The exported area: everything drawn plus a margin on all four sides. */
+function exportFrame(svg: SVGSVGElement, scene: Scene): Box {
+  const b = unionBoxes(
+    [sceneBounds(scene), renderedBounds(svg, scene)].filter((x) => x !== undefined),
+  )!;
+  return { x: b.x - PAD, y: b.y - PAD, w: b.w + PAD * 2, h: b.h + PAD * 2 };
+}
+
+/**
  * What an export of `selection` contains: the selected elements plus what belongs to them
  * (children of a box, shapes inside a frame) and arrows/edges whose both ends are included.
  */
@@ -54,11 +95,7 @@ function themeVariables(): string {
  * content. Theme variables are inlined so the file looks the same outside VS Code.
  */
 export function exportSvg(svg: SVGSVGElement, scene: Scene): string {
-  const b = sceneBounds(scene);
-  const x = b.x - PAD;
-  const y = b.y - PAD;
-  const w = b.w + PAD * 2;
-  const h = b.h + PAD * 2;
+  const { x, y, w, h } = exportFrame(svg, scene);
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.querySelectorAll('.pc-ui, .pc-hit, .pc-grid').forEach((n) => n.remove());
   // A partial scene (an export of the selection): drop everything else.
@@ -92,9 +129,9 @@ export function exportSvg(svg: SVGSVGElement, scene: Scene): string {
 /** Rasterises the exported SVG. Returns base64 PNG data (no data: prefix). */
 export async function exportPng(svg: SVGSVGElement, scene: Scene, scale = 2): Promise<string> {
   const text = exportSvg(svg, scene);
-  const b = sceneBounds(scene);
-  const w = Math.ceil(b.w + PAD * 2);
-  const h = Math.ceil(b.h + PAD * 2);
+  const frame = exportFrame(svg, scene);
+  const w = Math.ceil(frame.w);
+  const h = Math.ceil(frame.h);
   // Keep huge boards under common canvas limits.
   const s = Math.min(scale, 16000 / Math.max(w, h));
   const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));

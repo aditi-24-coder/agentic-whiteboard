@@ -383,6 +383,14 @@ textarea {
   stroke-width: 2;
   pointer-events: none;
 }
+.pc-anchor {
+  fill: var(--pc-card);
+  stroke: var(--pc-accent);
+  pointer-events: none;
+}
+.pc-anchor-active {
+  fill: var(--pc-accent);
+}
 
 @keyframes pc-pulse {
   0%,

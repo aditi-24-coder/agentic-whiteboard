@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { HostToWebview, Plan, WebviewToHost } from '@agentic-whiteboard/shared';
+import type { FreeformShape, HostToWebview, Plan, WebviewToHost } from '@agentic-whiteboard/shared';
 import { App } from '../src/App';
 import type { Host } from '../src/host';
 
@@ -274,6 +274,41 @@ describe('App', () => {
     expect(shape && shape.h).toBeGreaterThan(24);
   });
 
+  it('changes the text size of a sticky note from the text bar, Properties and the style picker', () => {
+    const { host, posted, send } = fakeHost();
+    act(() => root.render(<App host={host} />));
+    const p = plan();
+    p.comments = [{ id: 'note', text: 'Remember the retries' }];
+    p.layout.note = { x: 0, y: -400, w: 200, h: 110 };
+    send({ type: 'load', plan: p, settings });
+    const note = container.querySelector('[data-id="note"]')!;
+    act(() => {
+      pointer('pointerdown', note);
+      pointer('pointerup', note);
+    });
+    const size = () => posted.filter((m) => m.type === 'edit').at(-1)?.plan.comments[0]?.fontSize;
+    const sizeButton = (scope: Element, label: string) =>
+      [...scope.querySelectorAll('button')].find((b) => b.textContent === label)!;
+
+    const bar = container.querySelector('.pc-text-bar')!;
+    expect(bar).not.toBeNull();
+    act(() => sizeButton(bar, 'L').click());
+    expect(size()).toBe(24);
+
+    act(() =>
+      [...container.querySelectorAll('button')]
+        .find((b) => b.textContent?.includes('Properties'))!
+        .click(),
+    );
+    act(() => sizeButton(container.querySelector('.pc-inspector')!, 'XL').click());
+    expect(size()).toBe(36);
+
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Style"]')!.click());
+    const picker = container.querySelector('.pc-style-picker')!;
+    act(() => sizeButton(picker, 'S').click());
+    expect(size()).toBe(14);
+  });
+
   function selectNode(id: string) {
     const node = container.querySelector(`[data-id="${id}"]`)!;
     act(() => {
@@ -368,6 +403,67 @@ describe('App', () => {
     const editor = container.querySelector<HTMLTextAreaElement>('textarea.pc-text-editor')!;
     expect(editor).not.toBeNull();
     expect(editor.value).toBe('Orders API');
+  });
+
+  it('a click inside a drawn, unfilled box selects it and a double-click edits its text', () => {
+    const { host, send } = fakeHost();
+    act(() => root.render(<App host={host} />));
+    send({ type: 'load', plan: plan(), settings });
+    const svg = container.querySelector('.pc-canvas-wrap svg')!;
+    const at = toScreen(-1000, -1000);
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Rectangle"]')!.click());
+    act(() => {
+      pointer('pointerdown', svg, at);
+      pointer('pointerup', svg, at);
+    });
+    // Click empty canvas to drop the selection, then inside the box (the svg is the target).
+    const away = toScreen(-1300, -1300);
+    act(() => {
+      pointer('pointerdown', svg, away);
+      pointer('pointerup', svg, away);
+    });
+    expect(container.querySelector('.pc-handle')).toBeNull();
+    act(() => {
+      pointer('pointerdown', svg, at);
+      pointer('pointerup', svg, at);
+    });
+    expect(container.querySelector('.pc-handle')).not.toBeNull();
+    expect(container.querySelector('textarea.pc-text-editor')).toBeNull();
+    act(() => {
+      svg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, ...at }));
+    });
+    expect(container.querySelector('textarea.pc-text-editor')).not.toBeNull();
+  });
+
+  it('shows connection points on a box with the arrow tool and snaps an arrow to one', () => {
+    const { host, posted, send } = fakeHost();
+    act(() => root.render(<App host={host} />));
+    send({ type: 'load', plan: plan(), settings });
+    const svg = container.querySelector('.pc-canvas-wrap svg')!;
+    const tool = (label: string) =>
+      act(() => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());
+    // A click with the rectangle tool draws a 120x80 box centred on it.
+    tool('Rectangle');
+    const box = toScreen(-1000, -1000);
+    act(() => {
+      pointer('pointerdown', svg, box);
+      pointer('pointerup', svg, box);
+    });
+    tool('Arrow (drag between boxes to connect them)');
+    const nearEast = toScreen(-935, -1000);
+    act(() => pointer('pointermove', svg, nearEast));
+    expect(container.querySelectorAll('.pc-anchor')).toHaveLength(4);
+    expect(container.querySelectorAll('.pc-anchor-active')).toHaveLength(1);
+    const away = toScreen(-600, -1000);
+    act(() => pointer('pointerdown', svg, nearEast));
+    act(() => pointer('pointermove', svg, away));
+    act(() => pointer('pointerup', svg, away));
+    const edit = posted.filter((m) => m.type === 'edit').at(-1)!;
+    const shapes = (edit.plan.freeform as { shapes: FreeformShape[] }).shapes;
+    const rect = shapes.find((s) => s.type === 'rect')!;
+    const arrow = shapes.find((s) => s.type === 'arrow');
+    expect(arrow?.type === 'arrow' && arrow.start).toMatchObject({ bindTo: rect.id, anchor: 'e' });
+    expect(container.querySelectorAll('.pc-anchor')).toHaveLength(0);
   });
 
   it('the text bar sets the font size of a diagram box and grows it to fit', () => {

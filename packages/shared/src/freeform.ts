@@ -64,7 +64,10 @@ export interface ArrowEnd {
   y: number;
   /** Id of any canvas element (plan element or freeform shape) this end is bound to. */
   bindTo?: string;
+  /** Side of the bound element this end attaches to; unset follows the other end. */
+  anchor?: ArrowAnchor;
 }
+export type ArrowAnchor = 'n' | 'e' | 's' | 'w';
 export interface ArrowShape extends Base {
   type: 'arrow';
   start: ArrowEnd;

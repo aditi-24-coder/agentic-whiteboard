@@ -3,12 +3,12 @@
   "displayName": "Agentic Whiteboard",
   "description": "A whiteboard in VS Code that your AI (Claude, Copilot, Codex, Cursor, Cline…) draws on over MCP. Create a .whiteboard file and just ask.",
   "version": "0.1.0",
-  "publisher": "YOUR_PUBLISHER_ID",
+  "publisher": "aditi-24-coder",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_GITHUB_USER/agentic-whiteboard.git"
+    "url": "https://github.com/aditi-24-coder/agentic-whiteboard.git"
   },
   "engines": {
     "vscode": "^1.101.0"

@@ -24,7 +24,8 @@ import {
 } from './canvas/Canvas';
 import { exportScope } from './canvas/export';
 import { unionBoxes } from './canvas/geometry';
-import { addElement } from './canvas/ops';
+import { addElement, isStylableText, mapElements, setTextStyle } from './canvas/ops';
+import { textStyleOf } from './canvas/textStyle';
 import type { Scene } from './canvas/types';
 import { CodePanel } from './CodePanel';
 import type { Host } from './host';
@@ -85,6 +86,40 @@ export function App({ host }: { host: Host }) {
     strokeWidth: 2,
   });
   const canvas = useRef<CanvasHandle>(null);
+  // The palette's style picker shows and edits the selection: color, fill and stroke of free-form
+  // shapes, and the text size of anything with styleable text (shapes, sticky notes, boxes).
+  const selected = (scene?.elements ?? []).filter((e) => selection.has(e.id));
+  const selectedShapes = selected.filter((e) => e.kind === 'shape' && e.data.type !== 'frame');
+  const selectedText = selected.filter(isStylableText);
+  const first = selectedShapes[0];
+  const firstText = selectedText[0];
+  const pickerStyle: ShapeStyleState = {
+    ...shapeStyle,
+    ...(first?.kind === 'shape' && {
+      color: first.data.color ?? 'default',
+      fill: first.data.fill ?? 'none',
+      strokeWidth: first.data.strokeWidth ?? 2,
+    }),
+    ...(firstText && { fontSize: textStyleOf(firstText)!.fontSize }),
+  };
+  const onStyle = (next: ShapeStyleState) => {
+    setShapeStyle(next);
+    if (!scene || (!selectedShapes.length && !selectedText.length)) return;
+    // Only what was changed, so a mixed selection keeps its other differences.
+    const patch = {
+      ...(next.color !== pickerStyle.color && { color: next.color }),
+      ...(next.fill !== pickerStyle.fill && { fill: next.fill }),
+      ...(next.strokeWidth !== pickerStyle.strokeWidth && { strokeWidth: next.strokeWidth }),
+    };
+    let s = scene;
+    if (Object.keys(patch).length)
+      s = mapElements(s, new Set(selectedShapes.map((e) => e.id)), (e) =>
+        e.kind === 'shape' ? { ...e, data: { ...e.data, ...patch } } : e,
+      );
+    if (next.fontSize !== undefined && next.fontSize !== pickerStyle.fontSize)
+      s = setTextStyle(s, new Set(selectedText.map((e) => e.id)), { fontSize: next.fontSize });
+    if (s !== scene) onChange(s, true);
+  };
   // The dock is one to three rows tall depending on the width; panels must stay above it.
   const dockObserver = useRef<ResizeObserver | undefined>(undefined);
   const dockRef = useCallback((dock: HTMLDivElement | null) => {
@@ -486,8 +521,8 @@ export function App({ host }: { host: Host }) {
             tool={tool}
             onTool={setTool}
             readOnly={readOnly}
-            style={shapeStyle}
-            onStyle={setShapeStyle}
+            style={pickerStyle}
+            onStyle={onStyle}
           />
         </div>
       </main>

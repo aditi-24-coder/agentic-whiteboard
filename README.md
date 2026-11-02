@@ -4,6 +4,21 @@ Agentic Whiteboard is a VS Code extension for repository-based planning and
 AI-assisted diagrams. Boards are stored as readable `.whiteboard` files that
 can be reviewed, committed, and shared with a team.
 
+## Why use Agentic Whiteboard?
+
+- **You and your AI draw on the same board.** Sketch by hand with shapes, arrows, notes, and a pen,
+  or let any MCP client (Claude Code, Copilot, Codex, Cursor, Cline) draw for you, with its changes
+  appearing live.
+- **Diagrams that stay true to the code.** Boxes link to real files and packages, and drift
+  detection flags when the code and the diagram disagree, instead of letting them silently go stale.
+- **Plans you can verify.** The AI plans a change as boxes and steps, and each step is verified with
+  your tests and the git diff, so "done" is backed by evidence.
+- **Boards live in your repository.** Plain `.whiteboard` files that you review, diff, and commit
+  like code, with no external account or cloud service.
+- **Safe to share with an agent.** The board locks while the AI works, and simultaneous edits are
+  merged, so neither side's changes are lost.
+- **Private by default.** Everything stays local: no telemetry and no network calls.
+
 ## Features
 
 - AI-controlled diagrams through the Model Context Protocol (MCP)
